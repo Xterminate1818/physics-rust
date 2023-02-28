@@ -12,12 +12,12 @@ impl Default for ImpulseSolver {
   fn default() -> Self {
     Self {
       objs: vec![],
-      substeps: 16,
+      substeps: 32,
       bounds: Rectangle {
         x: 0.0,
         y: 0.0,
-        width: 1000.0,
-        height: 1000.0,
+        width: 800.0,
+        height: 800.0,
       },
     }
   }
@@ -50,14 +50,14 @@ impl ImpulseSolver {
       for other_index in circle_index..self.objs.len() {
         let circle = &self.objs[circle_index].position;
         let other = &self.objs[other_index].position;
-        // if circle.x < other.x - DIAMETER {
-        //   break; // No further collisions possible
-        // }
+        if circle.x < other.x - DIAMETER {
+          break; // No further collisions possible
+        }
         let dx = (circle.x - other.x).abs();
         let dy = (circle.y - other.y).abs();
-        // if dx >= DIAMETER || dy >= DIAMETER {
-        //   continue; // Skip over obvious noncollisions
-        // }
+        if dx >= DIAMETER || dy >= DIAMETER {
+          continue; // Skip over obvious noncollisions
+        }
         // Finally, resort to expensive calculation
         let resolution = Circle::find_impulse(
           &self.objs[circle_index],
@@ -111,11 +111,12 @@ impl ImpulseSolver {
   }
 
   pub fn do_step(&mut self) {
-    let substep_delta = 1.0 / (self.substeps as f32);
+    let substep_delta = 0.1 / (self.substeps as f32);
     if substep_delta == 0.0 {
       println!("0 DELTA!!!")
     }
-    for _ in 0..self.substeps {
+        // Amongus :) ඞ
+   for _ in 0..self.substeps {
       self.do_substep(substep_delta);
     }
   }
