@@ -8,3 +8,7 @@ edition = "2021"
 [dependencies]
 raylib = "3.7.0"
 rand = "0.8.5"
+rayon = "1.6.1"
+
+[profile.release]
+debug = true
