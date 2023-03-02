@@ -1,30 +1,38 @@
-use std::time::Instant;
-
-use crate::circle::*;
+use crate::bounds::{Boundable, Circle};
+use crate::verlet_object::*;
 use raylib::prelude::*;
 use rayon::prelude::*;
 
 pub struct ImpulseSolver {
-  pub buf1: Vec<Circle>,
-  buf2: Vec<Circle>,
-  // pub objs: Vec<Circle>,
+  pub objects: Vec<VerletObject>,
   pub substeps: u32,
-  bounds: Rectangle,
+  pub bounds: Box<dyn Boundable>,
+  pub timestep: f32,
+  pub current_time: f32,
+  pub response_mod: f32,
+  pub gravity: Vector2,
 }
 
 impl Default for ImpulseSolver {
   fn default() -> Self {
     Self {
-      buf1: vec![],
-      buf2: vec![],
-      // objs: vec![],
+      objects: vec![],
       substeps: 8,
-      bounds: Rectangle {
-        x: 0.0,
-        y: 0.0,
-        width: 1000.0,
-        height: 1000.0,
-      },
+      // bounds: Box::new(Rectangle {
+      //   x: 0.0,
+      //   y: 0.0,
+      //   width: 1000.0,
+      //   height: 1000.0,
+      // }),
+      bounds: Box::new(Circle {
+        x: 500.0,
+        y: 500.0,
+        radius: 400.0,
+      }),
+      timestep: 1.0 / 60.0,
+      current_time: 0.0,
+      response_mod: 0.5,
+      gravity: Vector2::new(0.0, 1000.0),
     }
   }
 }
@@ -34,34 +42,37 @@ impl ImpulseSolver {
     ImpulseSolver::default()
   }
 
-  pub fn add_circle(&mut self, circle: Circle) {
-    let pos = &circle.position;
-    if pos.x >= self.bounds.x
-      && pos.x <= self.bounds.x + self.bounds.width
-      && pos.y >= self.bounds.y
-      && pos.y <= self.bounds.y + self.bounds.height
-    {
-      self.buf1.push(circle);
-    }
+  pub fn add_circle(&mut self, mut circle: VerletObject) {
+    circle = self.bounds.restrict(circle);
+    circle.last_position = circle.position;
+    self.objects.push(circle);
   }
 
   pub fn count_circles(&self) -> usize {
-    self.buf1.len()
+    self.objects.len()
   }
 
-  pub fn better_collision(&mut self) {
+  pub fn would_collide(&self, test: &VerletObject) -> bool {
+    let test = self.bounds.restrict(*test);
+    for other in &self.objects {
+      if (test.position.x - other.position.x).powi(2)
+        + (test.position.y - other.position.y).powi(2)
+        < DIAMETER_SQUARED
+      {
+        return true;
+      }
+    }
+    false
   }
 
   pub fn find_collisions(&mut self) {
-    let response_coefficient = 0.75;
-    for circle_index in 0..self.buf1.len() {
+    for circle_index in 0..self.objects.len() {
       // Apply gravity
-      self.buf1[circle_index].acceleration += Vector2::new(0.0, 1000.0);
-      for other_index in circle_index..self.buf1.len() {
-        let circle = &self.buf1[circle_index].position;
-        let other = &self.buf1[other_index].position;
-        let minimum_distance =
-          self.buf1[circle_index].radius + self.buf1[other_index].radius;
+      self.objects[circle_index].acceleration += self.gravity;
+      for other_index in circle_index..self.objects.len() {
+        let circle = &self.objects[circle_index].position;
+        let other = &self.objects[other_index].position;
+        let minimum_distance = DIAMETER;
         if circle.x < other.x - minimum_distance {
           break; // No further collisions possible
         }
@@ -71,79 +82,43 @@ impl ImpulseSolver {
         }
         let combined = *circle - *other;
         let distance_squared = combined.length_sqr();
-        if distance_squared >= minimum_distance.powi(2)
-          || distance_squared == 0.0
-        {
+        if distance_squared >= DIAMETER_SQUARED || distance_squared == 0.0 {
           continue;
         }
         // Finally, resort to expensive calculation
         let distance = distance_squared.sqrt();
         let normalized = combined.scale_by(1.0 / distance);
-        let delta = 0.5 * response_coefficient * (distance - minimum_distance);
-        self.buf1[circle_index].position -= normalized * delta * 0.5;
-        self.buf1[other_index].position += normalized * delta * 0.5;
+        let delta = 0.5 * self.response_mod * (distance - minimum_distance);
+        self.objects[circle_index].position -= normalized * delta * 0.5;
+        self.objects[other_index].position += normalized * delta * 0.5;
       }
     }
   }
 
-  pub fn resolve_velocities(&mut self, delta: f32) {
-    let delta_squared = (delta).powi(2);
-    for o in &mut self.buf1 {
-      let velocity = o.position - o.last_position;
-      o.last_position = o.position;
-      o.position = o.position + velocity + o.acceleration * delta_squared;
-      o.acceleration = Vector2::zero();
-      // Apply bounds
-      o.position.x = o.position.x.clamp(
-        self.bounds.x + o.radius,
-        self.bounds.x + self.bounds.width - o.radius,
-      );
-      o.position.y = o.position.y.clamp(
-        self.bounds.y + o.radius,
-        self.bounds.y + self.bounds.height - o.radius,
-      );
+  pub fn move_objects(&mut self, delta: f32) {
+    for o in &mut self.objects {
+      o.update(delta);
+      *o = self.bounds.restrict(*o);
     }
   }
 
-  pub fn apply_constraints(&mut self, circle: &mut Circle) {
-    if circle.position.y + circle.radius < self.bounds.height + self.bounds.y {
-      circle.position.y = self.bounds.height + self.bounds.y;
-    }
-  }
-
-  pub fn sort_objects(&mut self) {
-    self.buf1.par_sort_unstable_by(|a, b| {
+  fn sort_objects(&mut self) {
+    self.objects.par_sort_unstable_by(|a, b| {
       a.position.x.partial_cmp(&b.position.x).unwrap()
     })
   }
 
-  pub fn set_substeps(&mut self, new: u32) {
-    self.substeps = new;
-  }
-
-  pub fn do_substep(&mut self, delta: f32) {
-    let t = Instant::now();
+  fn do_substep(&mut self, delta: f32) {
     self.find_collisions();
-    // self.better_collision();
-    println!("Collision detection: {} msec", t.elapsed().as_millis());
-
-    let t = Instant::now();
-    self.resolve_velocities(delta);
-    println!("Movement: {} msec", t.elapsed().as_millis());
-
-    let t = Instant::now();
+    self.move_objects(delta);
     self.sort_objects();
-    println!("Sorting: {} msec", t.elapsed().as_millis());
   }
 
   pub fn do_step(&mut self) {
-    let substep_delta = (1.0 / 60.0) / (self.substeps as f32);
-    if substep_delta == 0.0 {
-      println!("0 DELTA!!!")
-    }
-    // Amongus :) ඞ
+    let substep_delta = self.timestep / (self.substeps as f32);
     for _ in 0..self.substeps {
       self.do_substep(substep_delta);
     }
+    self.current_time += self.timestep;
   }
 }
