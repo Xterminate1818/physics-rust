@@ -1,6 +1,6 @@
 use raylib::prelude::*;
 
-pub const RADIUS: f32 = 30.0;
+pub const RADIUS: f32 = 15.0;
 pub const DIAMETER: f32 = RADIUS * 2.0;
 pub const DIAMETER_SQUARED: f32 = DIAMETER * DIAMETER;
 

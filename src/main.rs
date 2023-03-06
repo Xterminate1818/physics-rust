@@ -12,8 +12,8 @@ fn main() {
 
 fn launch_app() {
   let (mut rl, thread) = raylib::init()
-    .size(1000, 1000)
-    .title("Hello, World")
+    .size(500, 500)
+    .title("Game")
     .build();
 
   rl.set_target_fps(60);
@@ -37,10 +37,10 @@ fn launch_app() {
     for o in &sim.objects {
       d.draw_circle_v(o.position, RADIUS, o.color);
     }
-    d.draw_circle_lines(500, 500, 400.0, Color::WHITE);
+    d.draw_circle_lines(250, 250, 250.0, Color::WHITE);
 
-    d.draw_fps(0, 0);
-    let count = sim.count_circles().to_string();
-    d.draw_text(&count, 0, 20, 20, Color::WHITE);
+    // d.draw_fps(0, 0);
+    // let count = sim.count_circles().to_string();
+    // d.draw_text(&count, 0, 20, 20, Color::WHITE);
   }
 }

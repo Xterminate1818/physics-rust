@@ -25,9 +25,9 @@ impl Default for ImpulseSolver {
       //   height: 1000.0,
       // }),
       bounds: Box::new(Circle {
-        x: 500.0,
-        y: 500.0,
-        radius: 400.0,
+        x: 250.0,
+        y: 250.0,
+        radius: 250.0,
       }),
       timestep: 1.0 / 60.0,
       current_time: 0.0,
